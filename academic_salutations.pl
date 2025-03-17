@@ -6,6 +6,8 @@
 #RC1 - a. in some cases, order or perl hash can be changed. To preserve the oreder use perl Tie::StoredOrderHash
 #             Instalation of cpan module for Aleph Perl distribution (as Aleph user):	> /exlibris/product/bin/perl -MCPAN -eshell
 #      b. running the script can be easily switched to debug mode by configuring the carable $debug_mode to true value (1)       										install Tie::StoredOrderHash
+#RC2 - set feminine on 'ova'. If gender is missing in patron data, can be set to "F" if name (surname) ends "ová" (common Czech feminine surname endning)
+#	new parameter in config file setFeminineOnOva (if true as in Perl, do this)
 use strict;
 use warnings;
 use utf8;
@@ -223,6 +225,12 @@ while ( my $patron=$sth->fetchrow_hashref() ) {
    unless ( $patron->{SALUTATION} ) { $patron->{SALUTATION}=''; }
    unless ( $patron->{SURNAME} ) { $patron->{SURNAME}=''; }
    unless ( $patron->{TITLE} ) { $patron->{TITLE}=''; }
+   #RC2
+   if ( $setFeminineOnOva ) { unless ( $patron->{GENDER} ) {
+      if ( $patron->{SURNAME} =~ m/ová$/ ) { $patron->{GENDER} = 'F'; }
+           } }
+   #RC2 end
+
    print "DEBUG patron ".$patron->{SURNAME}."has now title". $patron->{TITLE}."\n" if ($debug_mode);
    if ( $patron->{TITLE} ) {  #check if db patron has title (is not null) etc. 
       print "DEBUG has title ".$patron->{TITLE}."\n" if ($debug_mode);
