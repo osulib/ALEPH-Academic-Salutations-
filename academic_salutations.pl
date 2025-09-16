@@ -8,6 +8,8 @@
 #      b. running the script can be easily switched to debug mode by configuring the carable $debug_mode to true value (1)       										install Tie::StoredOrderHash
 #RC2 - set feminine on 'ova'. If gender is missing in patron data, can be set to "F" if name (surname) ends "ová" (common Czech feminine surname endning)
 #	new parameter in config file setFeminineOnOva (if true as in Perl, do this)
+#ENH1 - set of first names can be added in json format: name_gender.json  If parameter name_gender_derive is true, this json is loaded and i patron has no gender, the data is used to add the gender. 20250912
+
 use strict;
 use warnings;
 use utf8;
@@ -40,6 +42,7 @@ our $report_updated='';
 my $report_unmatched='';
 our $mail_error='';
 our $debug_mode=1; #RC1
+our $name_gender_derive=1; #ENH1
 
 our $from_email='aleph@somemachine.com';
 if ( $ENV{'HOST'} ) { $from_email='aleph@'.$ENV{'HOST'}; }
@@ -185,6 +188,20 @@ sub update_bor {
       }
    }
 
+
+#ENH1 - load names and their genders
+our $name_gender;
+if ( $name_gender_derive ) {
+   my $name_gender_text = '';
+   open(my $json_fh, "<:encoding(UTF-8)", "$Bin/name_gender.json") or  run_exemption ('ERROR - name_gender_derive is in use, but data json file name_gender.json cannot be loaded','die');
+   foreach (<$json_fh>) {
+      $name_gender_text .= $_;
+      };
+   my $json = JSON->new;
+   $name_gender = $json->decode($name_gender_text);
+   }
+#ENH1 end
+
 #0.2. backup
 print "z303 table backup (p_file_03)\n";
 system ( 'csh -f '.$ENV{'aleph_proc'}.'/p_file_03 '.uc($admBase).',z303 >/dev/null' );
@@ -230,6 +247,29 @@ while ( my $patron=$sth->fetchrow_hashref() ) {
       if ( $patron->{SURNAME} =~ m/ová$/ ) { $patron->{GENDER} = 'F'; }
            } }
    #RC2 end
+
+      #ENH1
+   if ( $name_gender_derive and $patron->{GENDER} eq ' ') {
+           print LOGFILE $patron->{NAME} . " has no gender ... trying to derive it.\n";
+           my $first_name = ''; $first_name=$patron->{NAME};
+           $first_name =~ s/^[^,]+, //;
+           unless ( $first_name ) { print LOGFILE "     Warning - no first name derived from the name ".$patron->{NAME}."\n"; }
+           else {
+              foreach my $gender_line ( @{ $name_gender->{'lines'} } ) {
+                      #print Dumper($gender_line);
+                      if ( $gender_line->{name} eq $first_name ){
+                              print LOGFILE "      name ".$gender_line->{name}.' should have gender '.$gender_line->{gender}."\n";
+                              $patron->{GENDER} = $gender_line->{gender};
+                              last;
+                      }
+
+           }
+           }
+
+
+   }
+   #ENH1 end
+
 
    print "DEBUG patron ".$patron->{SURNAME}."has now title". $patron->{TITLE}."\n" if ($debug_mode);
    if ( $patron->{TITLE} ) {  #check if db patron has title (is not null) etc. 
